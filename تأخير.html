@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة الحضور للمعلمين</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 200px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .input-group {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        input, select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 200px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #ff0000;
+            color: white;
+            border: 2px solid #D4AF37;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #cc0000;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .delete-btn {
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background-color: #cc0000;
+        }
+        .time-entry, .date-entry, .delay-entry {
+            display: block;
+            margin: 5px 0;
+        }
+        .teacher-select {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        .save-notification {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>نظام إدارة الحضور للمعلمين</h1>
+        
+        <div class="teacher-select">
+            <input type="text" id="newTeacherName" placeholder="اسم معلم جديد">
+            <button id="addNewTeacher">إضافة</button>
+        </div>
+        
+        <div class="input-group">
+            <select id="teacherName">
+                <option value="">اختر المعلم</option>
+            </select>
+            <input type="time" id="arrivalTime">
+            <button id="addAttendance">إضافة حضور</button>
+        </div>
+        
+        <div class="input-group">
+            <label for="endTime">نهاية توقيع الحضور:</label>
+            <input type="time" id="endTime" value="07:15">
+        </div>
+        
+        <div id="saveNotification" class="save-notification">تم الحفظ بنجاح!</div>
+        
+        <table id="attendanceTable">
+            <thead>
+                <tr>
+                    <th>اسم المعلم</th>
+                    <th>وقت الحضور</th>
+                    <th>التاريخ</th>
+                    <th>مدة التأخير</th>
+                    <th>إجمالي التأخير</th>
+                    <th>حذف</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const addNewTeacherBtn = document.getElementById('addNewTeacher');
+            const newTeacherNameInput = document.getElementById('newTeacherName');
+            const teacherSelect = document.getElementById('teacherName');
+            const addAttendanceBtn = document.getElementById('addAttendance');
+            const arrivalTimeInput = document.getElementById('arrivalTime');
+            const endTimeInput = document.getElementById('endTime');
+            const tableBody = document.querySelector('#attendanceTable tbody');
+            const saveNotification = document.getElementById('saveNotification');
+            
+            // تحميل البيانات المحفوظة من localStorage
+            let teachers = JSON.parse(localStorage.getItem('teachers')) || {};
+            let teacherList = JSON.parse(localStorage.getItem('teacherList')) || [];
+            let endTime = localStorage.getItem('endTime') || '07:15';
+            
+            // تعيين وقت النهاية المحفوظ
+            endTimeInput.value = endTime;
+            
+            // تحميل قائمة المعلمين في القائمة المنسدلة
+            loadTeacherDropdown();
+            
+            // تحميل بيانات الجدول إذا كانت موجودة
+            if (Object.keys(teachers).length > 0) {
+                loadAttendanceTable();
+            }
+            
+            // إضافة معلم جديد
+            addNewTeacherBtn.addEventListener('click', function() {
+                const teacherName = newTeacherNameInput.value.trim();
+                
+                if (!teacherName) {
+                    alert('الرجاء إدخال اسم المعلم');
+                    return;
+                }
+                
+                if (!teacherList.includes(teacherName)) {
+                    teacherList.push(teacherName);
+                    saveData();
+                    
+                    const option = document.createElement('option');
+                    option.value = teacherName;
+                    option.textContent = teacherName;
+                    teacherSelect.appendChild(option);
+                    
+                    showSaveNotification();
+                }
+                
+                newTeacherNameInput.value = '';
+            });
+            
+            // إضافة سجل حضور
+            addAttendanceBtn.addEventListener('click', function() {
+                const teacherName = teacherSelect.value;
+                const arrivalTime = arrivalTimeInput.value;
+                const endTime = endTimeInput.value;
+                
+                if (!teacherName || !arrivalTime) {
+                    alert('الرجاء اختيار المعلم وإدخال وقت الحضور');
+                    return;
+                }
+                
+                // حفظ وقت النهاية
+                localStorage.setItem('endTime', endTime);
+                
+                // حساب التأخير
+                const [endHour, endMinute] = endTime.split(':').map(Number);
+                const [arrivalHour, arrivalMinute] = arrivalTime.split(':').map(Number);
+                
+                let totalEndMinutes = endHour * 60 + endMinute;
+                let totalArrivalMinutes = arrivalHour * 60 + arrivalMinute;
+                
+                let delayMinutes = totalArrivalMinutes - totalEndMinutes;
+                delayMinutes = delayMinutes > 0 ? delayMinutes : 0;
+                
+                // تنسيق نص التأخير
+                let delayText = formatDelay(delayMinutes);
+                
+                // التحقق من وجود المعلم مسبقاً
+                if (teachers[teacherName]) {
+                    // تحديث بيانات المعلم الحالي
+                    const teacher = teachers[teacherName];
+                    teacher.arrivalTimes.push(arrivalTime);
+                    teacher.dates.push(getCurrentDateInput());
+                    teacher.delays.push(delayMinutes);
+                    teacher.totalDelay += delayMinutes;
+                    
+                    // تحديث نص التأخير الإجمالي
+                    let totalDelayText = formatDelay(teacher.totalDelay);
+                    
+                    // تحديث الصف
+                    const row = document.getElementById(`row-${teacherName}`);
+                    updateTeacherRow(row, teacher);
+                } else {
+                    // إضافة معلم جديد
+                    teachers[teacherName] = {
+                        arrivalTimes: [arrivalTime],
+                        dates: [getCurrentDateInput()],
+                        delays: [delayMinutes],
+                        totalDelay: delayMinutes
+                    };
+                    
+                    // إنشاء صف جديد
+                    const row = tableBody.insertRow();
+                    row.id = `row-${teacherName}`;
+                    
+                    updateTeacherRow(row, teachers[teacherName]);
+                }
+                
+                // حفظ البيانات
+                saveData();
+                showSaveNotification();
+                
+                // مسح حقول الإدخال
+                arrivalTimeInput.value = '';
+            });
+            
+            // حذف معلم
+            tableBody.addEventListener('click', function(e) {
+                if (e.target.classList.contains('delete-btn')) {
+                    const teacherName = e.target.getAttribute('data-teacher');
+                    delete teachers[teacherName];
+                    
+                    // إزالة من القائمة المنسدلة
+                    const options = teacherSelect.options;
+                    for (let i = 0; i < options.length; i++) {
+                        if (options[i].value === teacherName) {
+                            teacherSelect.remove(i);
+                            break;
+                        }
+                    }
+                    
+                    // إزالة من قائمة المعلمين
+                    teacherList = teacherList.filter(name => name !== teacherName);
+                    
+                    // إزالة الصف
+                    document.getElementById(`row-${teacherName}`).remove();
+                    
+                    // حفظ البيانات
+                    saveData();
+                    showSaveNotification();
+                }
+            });
+            
+            // تحديث تاريخ عند التعديل
+            tableBody.addEventListener('change', function(e) {
+                if (e.target.tagName === 'INPUT' && e.target.type === 'date') {
+                    const row = e.target.closest('tr');
+                    const teacherName = row.id.replace('row-', '');
+                    
+                    // تحديث التاريخ في بيانات المعلم
+                    const dateInputs = row.querySelectorAll('.date-entry input');
+                    teachers[teacherName].dates = Array.from(dateInputs).map(input => input.value);
+                    
+                    // حفظ البيانات
+                    saveData();
+                    showSaveNotification();
+                }
+            });
+            
+            // دالة لتحميل القائمة المنسدلة للمعلمين
+            function loadTeacherDropdown() {
+                teacherList.forEach(teacher => {
+                    const option = document.createElement('option');
+                    option.value = teacher;
+                    option.textContent = teacher;
+                    teacherSelect.appendChild(option);
+                });
+            }
+            
+            // دالة لتحميل جدول الحضور
+            function loadAttendanceTable() {
+                Object.keys(teachers).forEach(teacherName => {
+                    const row = tableBody.insertRow();
+                    row.id = `row-${teacherName}`;
+                    updateTeacherRow(row, teachers[teacherName]);
+                });
+            }
+            
+            // دالة لتنسيق نص التأخير
+            function formatDelay(delayMinutes) {
+                if (delayMinutes >= 60) {
+                    const hours = Math.floor(delayMinutes / 60);
+                    const minutes = delayMinutes % 60;
+                    return `${hours} ساعة و ${minutes} دقيقة`;
+                } else {
+                    return `${delayMinutes} دقيقة`;
+                }
+            }
+            
+            // دالة للحصول على التاريخ الحالي
+            function getCurrentDateInput() {
+                const today = new Date();
+                return today.toISOString().substr(0, 10);
+            }
+            
+            // دالة لتحديث صف المعلم
+            function updateTeacherRow(row, teacher) {
+                // مسح الخلايا الموجودة
+                while (row.firstChild) {
+                    row.removeChild(row.firstChild);
+                }
+                
+                // إضافة خلية اسم المعلم
+                const nameCell = row.insertCell();
+                nameCell.textContent = row.id.replace('row-', '');
+                
+                // إضافة خلية أوقات الحضور
+                const timeCell = row.insertCell();
+                teacher.arrivalTimes.forEach(time => {
+                    const div = document.createElement('div');
+                    div.className = 'time-entry';
+                    div.textContent = time;
+                    timeCell.appendChild(div);
+                });
+                
+                // إضافة خلية التواريخ
+                const dateCell = row.insertCell();
+                teacher.dates.forEach(date => {
+                    const div = document.createElement('div');
+                    div.className = 'date-entry';
+                    const dateInput = document.createElement('input');
+                    dateInput.type = 'date';
+                    dateInput.value = date;
+                    div.appendChild(dateInput);
+                    dateCell.appendChild(div);
+                });
+                
+                // إضافة خلية التأخير
+                const delayCell = row.insertCell();
+                teacher.delays.forEach(delay => {
+                    const div = document.createElement('div');
+                    div.className = 'delay-entry';
+                    div.textContent = formatDelay(delay);
+                    delayCell.appendChild(div);
+                });
+                
+                // إضافة خلية التأخير الإجمالي
+                const totalDelayCell = row.insertCell();
+                totalDelayCell.textContent = formatDelay(teacher.totalDelay);
+                
+                // إضافة خلية الحذف
+                const deleteCell = row.insertCell();
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = 'حذف';
+                deleteBtn.setAttribute('data-teacher', row.id.replace('row-', ''));
+                deleteCell.appendChild(deleteBtn);
+            }
+            
+            // دالة لحفظ البيانات في localStorage
+            function saveData() {
+                localStorage.setItem('teachers', JSON.stringify(teachers));
+                localStorage.setItem('teacherList', JSON.stringify(teacherList));
+            }
+            
+            // دالة لعرض إشعار الحفظ
+            function showSaveNotification() {
+                saveNotification.style.display = 'block';
+                setTimeout(() => {
+                    saveNotification.style.display = 'none';
+                }, 2000);
+            }
+            
+            // حفظ البيانات تلقائياً عند إغلاق الصفحة
+            window.addEventListener('beforeunload', saveData);
+        });
+    </script>
+</body>
+</html>
